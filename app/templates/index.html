@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisi delle Emozioni</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Analisi delle Emozioni</h1>
+
+        {% if error %}
+        <div class="alert alert-danger">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        {% if message %}
+        <div class="alert alert-success">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Carica i tuoi file CSV</h2>
+            </div>
+            <div class="card-body">
+                <form action="/process/" method="post" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="files">Seleziona uno o più file CSV:</label>
+                        <input type="file" id="files" name="files" accept=".csv" multiple required class="form-control">
+                        <small class="form-text text-muted">Puoi selezionare più file contemporaneamente.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="threshold">Soglia di intensità:</label>
+                        <input type="number" id="threshold" name="threshold" min="0" max="1" step="0.01" value="0.2"
+                            class="form-control">
+                        <small class="form-text text-muted">Valore minimo di intensità per considerare un'emozione (tra
+                            0 e 1).</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Elabora</button>
+                </form>
+            </div>
+        </div>
+
+        {% if result_files %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h2>Risultati</h2>
+            </div>
+            <div class="card-body">
+                <p>Sono stati generati i seguenti file finali:</p>
+                <ul>
+                    {% for file in result_files %}
+                    <li>{{ file }}</li>
+                    {% endfor %}
+                </ul>
+                <p>Tutti i file elaborati sono disponibili nelle seguenti directory:</p>
+                <ul class="directory-list">
+                    <li><strong>results/sanitized/</strong> - File CSV sanitizzati</li>
+                    <li><strong>results/aggregated/</strong> - Dati aggregati per secondo</li>
+                    <li><strong>results/emotions/</strong> - Risultati dell'analisi delle emozioni</li>
+                    <li><strong>results/final/</strong> - Dataset finali con le emozioni dominanti</li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+
+</html>
