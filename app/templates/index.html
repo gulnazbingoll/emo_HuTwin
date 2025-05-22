@@ -1,16 +1,39 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analisi delle Emozioni</title>
+    <title>Emotion Analysis</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
 </head>
+<style>
+    
+input[type="number"] {
+    width: 100px;
+}
 
+/* Checkbox styles */
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+    width: auto;
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+
+.checkbox-wrapper label {
+    margin-bottom: 0;
+    cursor: pointer;
+}
+</style>
 <body>
     <div class="container">
-        <h1>Analisi delle Emozioni</h1>
+        <h1>Emotion Analysis</h1>
 
         {% if error %}
         <div class="alert alert-danger">
@@ -26,25 +49,36 @@
 
         <div class="card">
             <div class="card-header">
-                <h2>Carica i tuoi file CSV</h2>
+                <h2>Upload your CSV files</h2>
             </div>
             <div class="card-body">
                 <form action="/process/" method="post" enctype="multipart/form-data">
                     <div class="form-group">
-                        <label for="files">Seleziona uno o più file CSV:</label>
+                        <label for="files">Select one or more CSV files:</label>
                         <input type="file" id="files" name="files" accept=".csv" multiple required class="form-control">
-                        <small class="form-text text-muted">Puoi selezionare più file contemporaneamente.</small>
+                        <small class="form-text text-muted">You can select multiple files at once.</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="threshold">Soglia di intensità:</label>
+                        <label for="threshold">Intensity threshold:</label>
                         <input type="number" id="threshold" name="threshold" min="0" max="1" step="0.01" value="0.2"
                             class="form-control">
-                        <small class="form-text text-muted">Valore minimo di intensità per considerare un'emozione (tra
-                            0 e 1).</small>
+                        <small class="form-text text-muted">Minimum intensity value to consider an emotion (between
+                            0 and 1).</small>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Elabora</button>
+                    <div class="form-group">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="split_output_files" name="split_output_files" value="true">
+                            <label for="split_output_files">Create separate files for each task</label>
+                        </div>
+                        <small class="form-text text-muted">
+                            If selected, separate files will be created for each task detected in the CSV. 
+                            Otherwise, all tasks will be aggregated into a single final file.
+                        </small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Process</button>
                 </form>
             </div>
         </div>
@@ -52,22 +86,54 @@
         {% if result_files %}
         <div class="card mt-4">
             <div class="card-header">
-                <h2>Risultati</h2>
+                <h2>Results</h2>
             </div>
             <div class="card-body">
-                <p>Sono stati generati i seguenti file finali:</p>
+                {% if split_mode %}
+                <p>The following separate files for each task have been generated:</p>
+                {% else %}
+                <p>The following aggregated files have been generated:</p>
+                {% endif %}
                 <ul>
                     {% for file in result_files %}
                     <li>{{ file }}</li>
                     {% endfor %}
                 </ul>
-                <p>Tutti i file elaborati sono disponibili nelle seguenti directory:</p>
+                
+                {% if split_mode %}
+                <p>The processed files are available in the following directories:</p>
                 <ul class="directory-list">
-                    <li><strong>results/sanitized/</strong> - File CSV sanitizzati</li>
-                    <li><strong>results/aggregated/</strong> - Dati aggregati per secondo</li>
-                    <li><strong>results/emotions/</strong> - Risultati dell'analisi delle emozioni</li>
-                    <li><strong>results/final/</strong> - Dataset finali con le emozioni dominanti</li>
+                    <li><strong>results/sanitized/</strong> - Sanitized CSV files</li>
+                    <li><strong>results/aggregated/</strong> - Data aggregated by second (per task)</li>
+                    <li><strong>results/emotions/</strong> - Emotion analysis results (per task)</li>
+                    <li><strong>results/final/</strong> - Final datasets with dominant emotions (per task)</li>
+                    <li><strong>results/statistics/</strong> - Statistics files and emotion distribution charts (per task)</li>
                 </ul>
+                {% else %}
+                <p>The processed files are available in the following directories:</p>
+                <ul class="directory-list">
+                    <li><strong>results/sanitized/</strong> - Sanitized CSV files</li>
+                    <li><strong>results/final/</strong> - Aggregated final datasets with dominant emotions</li>
+                    <li><strong>results/statistics/</strong> - Statistics files and emotion distribution charts</li>
+                </ul>
+                <p><em>Note: In aggregated mode, intermediate files (aggregated, emotions) are not saved to save space.</em></p>
+                {% endif %}
+                
+                <div class="statistics-info mt-4">
+                    <h3>Statistics and Visualizations</h3>
+                    <p>For each processed file, the following additional files are generated:</p>
+                    <ul class="directory-list">
+                        <li><strong>*_statistics.json</strong> - Detailed statistics in JSON format, including:
+                            <ul>
+                                <li>Total number of records and timestamps</li>
+                                <li>Emotion counts and percentages</li>
+                                <li>Most common emotion</li>
+                                <li>Average intensity of each emotion</li>
+                            </ul>
+                        </li>
+                        <li><strong>*_emotion_chart.png</strong> - Pie chart showing the distribution of emotions</li>
+                    </ul>
+                </div>
             </div>
         </div>
         {% endif %}

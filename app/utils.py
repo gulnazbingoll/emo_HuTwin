@@ -1,40 +1,40 @@
-# Dizionario ristrutturato che raggruppa le espressioni per tipo di AU
+# Dictionary restructured to group expressions by AU type
 emotion_primary_patterns = {
     "happiness": [
-        ["CheekRaiserL", "CheekRaiserR"],        # AU6 (L o R)
-        ["LipCornerPullerL", "LipCornerPullerR"]  # AU12 (L o R)
+        ["CheekRaiserL", "CheekRaiserR"],        # AU6 (L or R)
+        ["LipCornerPullerL", "LipCornerPullerR"]  # AU12 (L or R)
     ],
     "sadness": [
-        ["InnerBrowRaiserL", "InnerBrowRaiserR"],      # AU1 (L o R)
-        ["BrowLowererL", "BrowLowererR"],              # AU4 (L o R)
-        ["LipCornerDepressorL", "LipCornerDepressorR"]  # AU15 (L o R)
+        ["InnerBrowRaiserL", "InnerBrowRaiserR"],      # AU1 (L or R)
+        ["BrowLowererL", "BrowLowererR"],              # AU4 (L or R)
+        ["LipCornerDepressorL", "LipCornerDepressorR"]  # AU15 (L or R)
     ],
     "surprise": [
-        ["InnerBrowRaiserL", "InnerBrowRaiserR"],      # AU1 (L o R)
-        ["OuterBrowRaiserL", "OuterBrowRaiserR"],      # AU2 (L o R)
-        ["UpperLidRaiserL", "UpperLidRaiserR"],        # AU5 (L o R)
+        ["InnerBrowRaiserL", "InnerBrowRaiserR"],      # AU1 (L or R)
+        ["OuterBrowRaiserL", "OuterBrowRaiserR"],      # AU2 (L or R)
+        ["UpperLidRaiserL", "UpperLidRaiserR"],        # AU5 (L or R)
         ["JawDrop"]                                    # AU26
     ],
     "fear": [
-        ["InnerBrowRaiserL", "InnerBrowRaiserR"],      # AU1 (L o R)
-        ["OuterBrowRaiserL", "OuterBrowRaiserR"],      # AU2 (L o R)
-        ["BrowLowererL", "BrowLowererR"],              # AU4 (L o R)
-        ["UpperLidRaiserL", "UpperLidRaiserR"],        # AU5 (L o R)
-        ["LipStretcherL", "LipStretcherR"],            # AU20 (L o R)
+        ["InnerBrowRaiserL", "InnerBrowRaiserR"],      # AU1 (L or R)
+        ["OuterBrowRaiserL", "OuterBrowRaiserR"],      # AU2 (L or R)
+        ["BrowLowererL", "BrowLowererR"],              # AU4 (L or R)
+        ["UpperLidRaiserL", "UpperLidRaiserR"],        # AU5 (L or R)
+        ["LipStretcherL", "LipStretcherR"],            # AU20 (L or R)
         ["JawDrop"]                                    # AU26
     ],
     "anger": [
-        ["BrowLowererL", "BrowLowererR"],              # AU4 (L o R)
-        ["UpperLidRaiserL", "UpperLidRaiserR"],        # AU5 (L o R)
-        ["LidTightenerL", "LidTightenerR"],            # AU7 (L o R)
-        ["LipTightenerL", "LipTightenerR"],            # AU23 (L o R)
-        ["LipPressorL", "LipPressorR"]                 # AU24 (L o R)
+        ["BrowLowererL", "BrowLowererR"],              # AU4 (L or R)
+        ["UpperLidRaiserL", "UpperLidRaiserR"],        # AU5 (L or R)
+        ["LidTightenerL", "LidTightenerR"],            # AU7 (L or R)
+        ["LipTightenerL", "LipTightenerR"],            # AU23 (L or R)
+        ["LipPressorL", "LipPressorR"]                 # AU24 (L or R)
     ],
     "disgust": [
-        ["NoseWrinklerL", "NoseWrinklerR"],            # AU9 (L o R)
-        ["UpperLipRaiserL", "UpperLipRaiserR"],        # AU10 (L o R)
-        ["LipCornerDepressorL", "LipCornerDepressorR"],# AU15 (L o R)
-        ["LowerLipDepressorL", "LowerLipDepressorR"],  # AU16 (L o R)
+        ["NoseWrinklerL", "NoseWrinklerR"],            # AU9 (L or R)
+        ["UpperLipRaiserL", "UpperLipRaiserR"],        # AU10 (L or R)
+        ["LipCornerDepressorL", "LipCornerDepressorR"],# AU15 (L or R)
+        ["LowerLipDepressorL", "LowerLipDepressorR"],  # AU16 (L or R)
         ["ChinRaiserB", "ChinRaiserT"]                 # AU17
     ],
 }

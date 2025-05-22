@@ -1,168 +1,168 @@
 # Emotion Recognition System
 
-## Panoramica
+## Overview
 
-Questo sistema analizza le espressioni facciali per rilevare emozioni in tempo reale. Utilizza dati di tracciamento delle espressioni facciali (Action Units) per identificare sei emozioni primarie: felicità, tristezza, sorpresa, paura, rabbia e disgusto. Il sistema elabora file CSV contenenti dati di espressioni facciali provenienti da sensori o sistemi di computer vision.
+This system analyzes facial expressions to detect emotions in real-time. It uses facial expression tracking data (Action Units) to identify six primary emotions: happiness, sadness, surprise, fear, anger, and disgust. The system processes CSV files containing facial expression data from sensors or computer vision systems.
 
-## Struttura del Progetto
+## Project Structure
 
-- `main.py`: Server web FastAPI per l'interfaccia utente
-- `processing.py`: Funzioni principali per l'elaborazione dei dati
-- `utils.py`: Utilities, inclusa la definizione dei pattern di emozioni
-- `logging_utils.py`: Utilities per il logging
+- `main.py`: FastAPI web server for the user interface
+- `processing.py`: Main functions for data processing
+- `utils.py`: Utilities, including the definition of emotion patterns
+- `logging_utils.py`: Utilities for logging
 
-## Pipeline di Elaborazione
+## Processing Pipeline
 
-La pipeline di elaborazione dei dati procede attraverso le seguenti fasi:
+The data processing pipeline proceeds through the following phases:
 
-1. **Caricamento e sanitizzazione dei dati**
-   - Rimozione delle righe con espressioni invalide
-   - Correzione dei formati numerici
-   - Divisione dei file in task separati (se presenti)
+1. **Data loading and sanitization**
+   - Removal of rows with invalid expressions
+   - Correction of numerical formats
+   - Splitting files into separate tasks (if present)
 
-2. **Aggregazione per secondo**
-   - Raggruppamento dei dati per secondo, ignorando i millisecondi
-   - Calcolo della media del peso per ogni espressione in ciascun intervallo di tempo
+2. **Aggregation by second**
+   - Grouping data by second, ignoring milliseconds
+   - Calculating the average weight for each expression in each time interval
 
-3. **Rilevamento delle emozioni** (dettagliato nella sezione successiva)
-   - Identificazione delle emozioni presenti in ogni timestamp
-   - Calcolo dell'intensità di ciascuna emozione
+3. **Emotion detection** (detailed in the next section)
+   - Identification of emotions present in each timestamp
+   - Calculation of the intensity of each emotion
 
-4. **Creazione del dataset finale**
-   - Generazione di un dataset con un'unica riga per timestamp
-   - Inclusione dell'intensità di tutte le 6 emozioni
-   - Identificazione dell'emozione dominante con applicazione di una soglia
+4. **Creation of the final dataset**
+   - Generation of a dataset with a single row per timestamp
+   - Inclusion of the intensity of all 6 emotions
+   - Identification of the dominant emotion by applying a threshold
 
-## Pipeline di Riconoscimento delle Emozioni (Step-by-Step)
+## Emotion Recognition Pipeline (Step-by-Step)
 
-Il riconoscimento delle emozioni si basa su pattern specifici di Action Units (AU). La chiave sta nella struttura del dizionario `emotion_primary_patterns` e nell'algoritmo di rilevamento.
+Emotion recognition is based on specific patterns of Action Units (AU). The key is in the structure of the `emotion_primary_patterns` dictionary and the detection algorithm.
 
-### 1. Struttura del Pattern di Emozioni
+### 1. Emotion Pattern Structure
 
-Ogni emozione è definita da un insieme di gruppi di AU. Per ciascun gruppo, è sufficiente che sia presente almeno una delle varianti (L o R) per considerare quel gruppo attivato:
+Each emotion is defined by a set of AU groups. For each group, it is sufficient that at least one of the variants (L or R) is present to consider that group activated:
 
 ```python
-# Esempio per la felicità
+# Example for happiness
 "happiness": [
-    ["CheekRaiserL", "CheekRaiserR"],        # AU6 (L o R)
-    ["LipCornerPullerL", "LipCornerPullerR"]  # AU12 (L o R)
+    ["CheekRaiserL", "CheekRaiserR"],        # AU6 (L or R)
+    ["LipCornerPullerL", "LipCornerPullerR"]  # AU12 (L or R)
 ]
 ```
 
-Questo significa che per riconoscere la felicità, è necessario che:
-- Sia presente AU6 sinistra OPPURE AU6 destra (sollevamento guancia)
-- E sia presente AU12 sinistra OPPURE AU12 destra (sollevamento angolo delle labbra)
+This means that to recognize happiness, it is necessary that:
+- AU6 left OR AU6 right (cheek raising) is present
+- AND AU12 left OR AU12 right (lip corner pulling) is present
 
-### 2. Algoritmo di Rilevamento (Dettagliato)
+### 2. Detection Algorithm (Detailed)
 
-Per ogni timestamp, il processo è il seguente:
+For each timestamp, the process is as follows:
 
-1. **Raccolta delle espressioni presenti**:
-   - Creazione di un dizionario che mappa ogni espressione al suo peso
+1. **Collection of present expressions**:
+   - Creation of a dictionary that maps each expression to its weight
 
-2. **Analisi delle emozioni**:
-   - Per ogni emozione definita nei pattern:
-     - Per ogni gruppo di AU in questa emozione:
-       - Verifica se almeno un'AU del gruppo è presente (con peso > 0)
-       - Se un gruppo è completamente assente, l'emozione non è riconosciuta
-       - Se tutti i gruppi sono presenti, calcola l'intensità dell'emozione
+2. **Emotion analysis**:
+   - For each emotion defined in the patterns:
+     - For each AU group in this emotion:
+       - Check if at least one AU of the group is present (with weight > 0)
+       - If a group is completely absent, the emotion is not recognized
+       - If all groups are present, calculate the emotion's intensity
 
-3. **Calcolo dell'intensità**:
-   - Per ogni gruppo di AU attivato, viene considerato il peso massimo tra le varianti
-   - L'intensità dell'emozione è la media dei pesi massimi di tutti i gruppi
-   - Le intensità vengono normalizzate (divise per la somma totale)
+3. **Intensity calculation**:
+   - For each activated AU group, the maximum weight among the variants is considered
+   - The emotion's intensity is the average of the maximum weights of all groups
+   - Intensities are normalized (divided by the total sum)
 
-4. **Ordinamento**:
-   - Le emozioni vengono ordinate per intensità (dalla più forte alla più debole)
+4. **Sorting**:
+   - Emotions are sorted by intensity (from strongest to weakest)
 
-### Esempio Completo di Calcolo
+### Complete Calculation Example
 
-Prendiamo come esempio un timestamp con queste espressioni attive:
+Let's take as an example a timestamp with these active expressions:
 - CheekRaiserL: 0.8
 - LipCornerPullerR: 0.6
 - BrowLowererL: 0.3
 
-Per la felicità:
-- Gruppo 1 (AU6): CheekRaiserL presente con peso 0.8 → Gruppo attivato
-- Gruppo 2 (AU12): LipCornerPullerR presente con peso 0.6 → Gruppo attivato
-- Tutti i gruppi sono attivati → Intensità = (0.8 + 0.6) / 2 = 0.7
+For happiness:
+- Group 1 (AU6): CheekRaiserL present with weight 0.8 → Group activated
+- Group 2 (AU12): LipCornerPullerR present with weight 0.6 → Group activated
+- All groups are activated → Intensity = (0.8 + 0.6) / 2 = 0.7
 
-Per la rabbia:
-- Gruppo 1 (AU4): BrowLowererL presente con peso 0.3 → Gruppo attivato
-- Gruppo 2 (AU5): nessuna variante presente → Gruppo non attivato
-- Almeno un gruppo non è attivato → Intensità = 0
+For anger:
+- Group 1 (AU4): BrowLowererL present with weight 0.3 → Group activated
+- Group 2 (AU5): no variant present → Group not activated
+- At least one group is not activated → Intensity = 0
 
-Per la tristezza e le altre emozioni: stessa logica, ma in questo caso nessun'altra emozione è riconosciuta perché mancano gruppi di AU essenziali.
+For sadness and other emotions: same logic, but in this case no other emotion is recognized because essential AU groups are missing.
 
-### Normalizzazione:
-- Totale intensità: 0.7 (felicità) + 0 (altre emozioni) = 0.7
-- Intensità normalizzata per felicità: 0.7 / 0.7 = 1.0
-- Risultato: 100% felicità
+### Normalization:
+- Total intensity: 0.7 (happiness) + 0 (other emotions) = 0.7
+- Normalized intensity for happiness: 0.7 / 0.7 = 1.0
+- Result: 100% happiness
 
-## Configurazione e Utilizzo
+## Configuration and Usage
 
-### Prerequisiti
+### Prerequisites
 - Python 3.8+
 - FastAPI
 - Pandas
-- Altri requisiti in `requirements.txt`
+- Other requirements in `requirements.txt`
 
-### Installazione
+### Installation
 ```bash
 pip install -r requirements.txt
 ```
 
-### Esecuzione
+### Execution
 ```bash
 python main.py
 ```
 
-L'applicazione sarà disponibile all'indirizzo `http://localhost:8000`
+The application will be available at `http://localhost:8000`
 
-### Caricamento dei File
-1. Accedi all'interfaccia web
-2. Carica uno o più file CSV con dati di espressioni facciali
-3. Imposta la soglia per il rilevamento delle emozioni (default: 0.2)
-4. Avvia l'elaborazione
+### File Upload
+1. Access the web interface
+2. Upload one or more CSV files with facial expression data
+3. Set the threshold for emotion detection (default: 0.2)
+4. Start processing
 
-### Formato del File di Input
-Il file CSV deve contenere le seguenti colonne:
-- Time: timestamp nel formato "HH:MM:SS.sss AM/PM"
-- Expression: nome dell'espressione facciale (es. "CheekRaiserL")
-- Weight: peso/intensità dell'espressione (valore numerico)
+### Input File Format
+The CSV file must contain the following columns:
+- Time: timestamp in the format "HH:MM:SS.sss AM/PM"
+- Expression: name of the facial expression (e.g., "CheekRaiserL")
+- Weight: weight/intensity of the expression (numerical value)
 
-## Note sulla Soglia e Sensibilità
+## Notes on Threshold and Sensitivity
 
-La soglia (threshold) definita dall'utente determina quando un'emozione è considerata dominante:
-- Se l'intensità normalizzata dell'emozione più forte è inferiore alla soglia, lo stato emotivo è etichettato come "neutral"
-- Valori più bassi di soglia aumentano la sensibilità del sistema
-- Valori più alti riducono i falsi positivi ma potrebbero non rilevare emozioni più sottili
+The threshold defined by the user determines when an emotion is considered dominant:
+- If the normalized intensity of the strongest emotion is below the threshold, the emotional state is labeled as "neutral"
+- Lower threshold values increase the system's sensitivity
+- Higher values reduce false positives but might not detect more subtle emotions
 
-## Risoluzione dei Problemi
+## Troubleshooting
 
-Se il sistema non rileva correttamente le emozioni:
-- Verificare che i file CSV contengano tutte le Action Units necessarie
-- Controllare che il formato dei dati sia corretto
-- Abbassare la soglia per aumentare la sensibilità
-- Esaminare i log per identificare eventuali errori
+If the system does not correctly detect emotions:
+- Verify that the CSV files contain all the necessary Action Units
+- Check that the data format is correct
+- Lower the threshold to increase sensitivity
+- Examine the logs to identify any errors
 
 ---
 
-## Documentazione Tecnica Supplementare
+## Additional Technical Documentation
 
-### Mappatura Action Units → Emozioni
+### Action Units → Emotions Mapping
 
-Le emozioni sono definite dai seguenti pattern di Action Units:
+Emotions are defined by the following Action Unit patterns:
 
-| Emozione | Pattern di AU |
+| Emotion | AU Pattern |
 |----------|---------------|
-| Felicità | AU6 (L/R) + AU12 (L/R) |
-| Tristezza | AU1 (L/R) + AU4 (L/R) + AU15 (L/R) |
-| Sorpresa | AU1 (L/R) + AU2 (L/R) + AU5 (L/R) + AU26 |
-| Paura | AU1 (L/R) + AU2 (L/R) + AU4 (L/R) + AU5 (L/R) + AU20 (L/R) + AU26 |
-| Rabbia | AU4 (L/R) + AU5 (L/R) + AU7 (L/R) + AU23 (L/R) + AU24 (L/R) |
-| Disgusto | AU9 (L/R) + AU10 (L/R) + AU15 (L/R) + AU16 (L/R) + AU17 |
+| Happiness | AU6 (L/R) + AU12 (L/R) |
+| Sadness | AU1 (L/R) + AU4 (L/R) + AU15 (L/R) |
+| Surprise | AU1 (L/R) + AU2 (L/R) + AU5 (L/R) + AU26 |
+| Fear | AU1 (L/R) + AU2 (L/R) + AU4 (L/R) + AU5 (L/R) + AU20 (L/R) + AU26 |
+| Anger | AU4 (L/R) + AU5 (L/R) + AU7 (L/R) + AU23 (L/R) + AU24 (L/R) |
+| Disgust | AU9 (L/R) + AU10 (L/R) + AU15 (L/R) + AU16 (L/R) + AU17 |
 
-Dove:
-- (L/R) indica che è sufficiente la presenza della versione sinistra O destra dell'AU
-- Per ogni emozione, tutte le AU elencate devono essere presenti (in almeno una variante L o R)
+Where:
+- (L/R) indicates that the presence of the left OR right version of the AU is sufficient
+- For each emotion, all listed AUs must be present (in at least one L or R variant)

@@ -76,6 +76,24 @@ input[type="number"] {
     width: 100px;
 }
 
+/* Checkbox styles */
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+    width: auto;
+    margin-right: 10px;
+    transform: scale(1.2);
+}
+
+.checkbox-wrapper label {
+    margin-bottom: 0;
+    cursor: pointer;
+}
+
 .form-text {
     color: #6c757d;
     font-size: 14px;

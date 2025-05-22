@@ -3,188 +3,208 @@ import io
 import os
 from pathlib import Path
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import logging
+import json
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime
 
 from utils import emotion_primary_patterns
 
 def sanitize_dataset(file_path: str, output_dir: str, logger: logging.Logger) -> str:
     """
-    Sanitizza un file CSV:
-    - Rimuove le righe con espressione "Invalid"
-    - Gestisce i problemi di formattazione dei numeri decimali
+    Sanitizes a CSV file:
+    - Removes rows with "Invalid" expression
+    - Handles decimal number formatting issues
     
     Args:
-        file_path: Path del file da sanitizzare
-        output_dir: Directory di output
-        logger: Logger per il logging
+        file_path: Path of the file to sanitize
+        output_dir: Output directory
+        logger: Logger for logging
         
     Returns:
-        Path del file sanitizzato
+        Path of the sanitized file
     """
-    logger.info(f"Sanitizzazione del file: {file_path}")
+    logger.info(f"Sanitizing file: {file_path}")
     
-    # Leggi il file come testo per pre-processarlo
+    # Read the file as text for pre-processing
     with open(file_path, "r") as file:
         content = file.read()
     
-    # Dividi in righe
+    # Split into lines
     lines = content.strip().split("\n")
     header = lines[0]
     processed_lines = [header]
 
     for line in lines[1:]:
-        # Salta le righe con espressione "Invalid"
+        # Skip lines with "Invalid" expression
         if ",Invalid," in line:
-            logger.debug(f"Riga con 'Invalid' ignorata: {line}")
+            logger.debug(f"Line with 'Invalid' ignored: {line}")
             continue
 
-        # Dividi per virgola
+        # Split by comma
         parts = line.split(",")
 
-        # Se ci sono 4 parti, significa che il numero decimale usa la virgola
-        # e dobbiamo sostituirla con un punto
+        # If there are 4 parts, it means the decimal number uses a comma
+        # and we need to replace it with a period
         if len(parts) == 4:
             fixed_line = f"{parts[0]},{parts[1]},{parts[2]}.{parts[3]}"
             processed_lines.append(fixed_line)
         else:
             processed_lines.append(line)
 
-    # Unisci le righe processate
+    # Join the processed lines
     processed_content = "\n".join(processed_lines)
     
-    # Crea il nome del file di output
+    # Create the output file name
     base_name = os.path.basename(file_path)
     output_file = os.path.join(output_dir, f"sanitized_{base_name}")
     
-    # Usa pandas per leggere e salvare i dati
+    # Use pandas to read and save the data
     df = pd.read_csv(io.StringIO(processed_content))
     df.to_csv(output_file, index=False)
     
-    logger.info(f"File sanitizzato salvato come: {output_file}")
+    logger.info(f"Sanitized file saved as: {output_file}")
     return output_file
 
-def split_tasks(file_path: str, output_dir: str, logger: logging.Logger) -> List[str]:
+def split_tasks_data(file_path: str, logger: logging.Logger) -> List[Tuple[pd.DataFrame, str]]:
     """
-    Divide un file CSV in più file quando si incontrano righe di divisione di task.
-    Il primo task va dall'inizio del file fino al primo delimitatore,
-    il secondo task va dal primo al secondo delimitatore, e così via.
+    Splits a CSV file into multiple DataFrames when task division rows are encountered.
+    Returns a list of tuples (DataFrame, task_name).
     
     Args:
-        file_path: Path del file da dividere
-        output_dir: Directory di output
-        logger: Logger per il logging
+        file_path: Path of the file to split
+        logger: Logger for logging
         
     Returns:
-        Lista dei path dei file creati
+        List of tuples (DataFrame, task_name)
     """
-    logger.info(f"Splitting del file per task: {file_path}")
+    logger.info(f"Splitting the file by task: {file_path}")
     
-    # Pattern regex per identificare le righe di divisione dei task
+    # Regex pattern to identify task division rows
     task_pattern = re.compile(r'#+\s*New level - TASK (\d+)\s*#+')
     
-    # Leggi il file
+    # Read the file
     with open(file_path, "r") as file:
         content = file.read()
     
-    # Dividi in righe
+    # Split into lines
     lines = content.strip().split("\n")
+    header = lines[0]
     
-    # Lista per tenere traccia degli indici di inizio dei task e dei numeri dei task
+    # List to keep track of task start indices and task numbers
     task_boundaries = []
     task_numbers = []
     
-    # Trova tutte le righe di divisione dei task
+    # Find all task division rows
     for i, line in enumerate(lines):
         match = task_pattern.match(line)
         if match:
             task_number = match.group(1)
             task_boundaries.append(i)
             task_numbers.append(task_number)
-            logger.debug(f"Trovato delimitatore per TASK {task_number} alla riga {i}")
+            logger.debug(f"Found delimiter for TASK {task_number} at line {i}")
     
-    # Se non ci sono divisioni di task, restituisci il file originale
+    # If there are no task divisions, return the complete DataFrame
     if not task_boundaries:
-        logger.info(f"Nessun delimitatore di task trovato nel file {file_path}")
-        return [file_path]
+        logger.info(f"No task delimiters found in file {file_path}")
+        df = pd.read_csv(file_path)
+        return [(df, "task_1")]
     
-    # Nome base per i file di output
-    base_name = os.path.basename(file_path)
-    name_without_ext = os.path.splitext(base_name)[0]
+    # List of created DataFrames
+    task_dataframes = []
     
-    # Lista dei file creati
-    created_files = []
-    
-    # Estrai l'intestazione (prima riga)
-    header = lines[0]
-    
-    # Gestisci il primo task (dall'inizio fino al primo delimitatore)
+    # Handle the first task (from the beginning to the first delimiter)
     first_task_end = task_boundaries[0]
-    if first_task_end > 1:  # Se ci sono dati prima del primo delimitatore
-        first_task_content = lines[:first_task_end]
-        first_task_file = os.path.join(output_dir, f"{name_without_ext}_processed_task_1.csv")
-        with open(first_task_file, "w") as out_file:
-            out_file.write("\n".join(first_task_content))
-        created_files.append(first_task_file)
-        logger.info(f"File per TASK 1 creato: {first_task_file}")
+    if first_task_end > 1:  # If there's data before the first delimiter
+        first_task_content = "\n".join(lines[:first_task_end])
+        first_task_df = pd.read_csv(io.StringIO(first_task_content))
+        task_dataframes.append((first_task_df, "task_1"))
+        logger.info(f"DataFrame for TASK 1 created with {len(first_task_df)} rows")
     
-    # Crea un file per ogni task successivo
+    # Create a DataFrame for each subsequent task
     for i in range(len(task_boundaries)):
-        start_idx = task_boundaries[i] + 1  # Salta la riga di divisione
+        start_idx = task_boundaries[i] + 1  # Skip the division row
         
         if i < len(task_boundaries) - 1:
             end_idx = task_boundaries[i + 1]
         else:
             end_idx = len(lines)
         
-        # Assicurati che ci siano dati da estrarre
+        # Make sure there's data to extract
         if start_idx >= end_idx:
-            logger.warning(f"Task {task_numbers[i]} vuoto, ignorato")
+            logger.warning(f"Task {task_numbers[i]} empty, ignored")
             continue
         
-        # Crea un nuovo file con i dati del task (assicurandoci di includere l'intestazione)
+        # Create a new DataFrame with the task data
         task_content = [header] + lines[start_idx:end_idx]
-        while len(task_content) > 1 and task_pattern.match(task_content[1]):
-            task_content.pop(1)  # Rimuovi eventuali delimitatori aggiuntivi
+        # Remove any additional delimiters
+        task_content = [line for line in task_content if not task_pattern.match(line)]
         
         task_content_str = "\n".join(task_content)
+        task_df = pd.read_csv(io.StringIO(task_content_str))
         
-        # Nome del file di output (utilizza il numero di task dal delimitatore)
+        # Use the task number from the delimiter
         task_num = int(task_numbers[i])
-        output_file = os.path.join(output_dir, f"{name_without_ext}_processed_task_{task_num+1}.csv")
+        task_name = f"task_{task_num+1}"
         
-        # Scrivi il file
-        with open(output_file, "w") as out_file:
-            out_file.write(task_content_str)
+        # Skip task 14
+        if task_num+1 == 14:
+            logger.info(f"Task 14 skipped as requested")
+            continue
         
-        created_files.append(output_file)
-        logger.info(f"File per TASK {task_num+1} creato: {output_file}")
+        task_dataframes.append((task_df, task_name))
+        logger.info(f"DataFrame for TASK {task_num+1} created with {len(task_df)} rows")
     
-    return created_files
+    return task_dataframes
 
 def aggregate_by_second(df: pd.DataFrame, output_file: Optional[str] = None) -> pd.DataFrame:
     """
-    Raggruppa i dati per secondo (ignorando i millisecondi) e calcola la media del Weight
-    per ogni Expression in quell'intervallo di tempo.
+    Groups data by second (ignoring milliseconds) and calculates the average Weight
+    for each Expression in that time interval.
 
     Args:
-        df: DataFrame con i dati
-        output_file: Nome del file di output (opzionale)
+        df: DataFrame with the data
+        output_file: Output file name (optional)
 
     Returns:
-        DataFrame con i dati aggregati
+        DataFrame with aggregated data
     """
-    # Estrai solo l'ora senza millisecondi (prendendo tutto fino al punto e mantenendo AM/PM)
+    # DEBUG: Analyze the Weight column
+    print(f"DEBUG - Available columns: {df.columns.tolist()}")
+    print(f"DEBUG - Weight column type: {df['Weight'].dtype}")
+    print(f"DEBUG - First 10 Weight values: {df['Weight'].head(10).tolist()}")
+    print(f"DEBUG - Unique Weight values (first 20): {df['Weight'].unique()[:20]}")
+    print(f"DEBUG - Null values in Weight: {df['Weight'].isnull().sum()}")
+    print(f"DEBUG - DataFrame shape: {df.shape}")
+    
+    # Check for non-numeric values
+    non_numeric = df[pd.to_numeric(df['Weight'], errors='coerce').isnull() & df['Weight'].notna()]
+    if len(non_numeric) > 0:
+        print(f"DEBUG - Non-numeric values found: {non_numeric['Weight'].unique()}")
+        print(f"DEBUG - Number of non-numeric values: {len(non_numeric)}")
+    
+    # Extract only the time without milliseconds (taking everything up to the period and keeping AM/PM)
     df["TimeSecond"] = df["Time"].apply(
         lambda x: x.split(".")[0] + " " + x.split(" ")[1]
     )
 
-    # Raggruppa per TimeSecond ed Expression, e calcola la media del Weight
+    # Convert Weight to numeric, replacing non-numeric values with NaN
+    df['Weight'] = pd.to_numeric(df['Weight'], errors='coerce')
+    
+    # Remove rows with NaN Weight
+    original_len = len(df)
+    df = df.dropna(subset=['Weight'])
+    if len(df) < original_len:
+        print(f"DEBUG - Removed {original_len - len(df)} rows with invalid Weight")
+
+    # Group by TimeSecond and Expression, and calculate the average Weight
     aggregated_df = (
         df.groupby(["TimeSecond", "Expression"])["Weight"].mean().reset_index()
     )
 
-    # Rinomina TimeSecond a Time
+    # Rename TimeSecond to Time
     aggregated_df.rename(columns={"TimeSecond": "Time"}, inplace=True)
 
     if output_file:
@@ -194,34 +214,34 @@ def aggregate_by_second(df: pd.DataFrame, output_file: Optional[str] = None) -> 
 
 def detect_emotions(df: pd.DataFrame, output_file: Optional[str] = None) -> pd.DataFrame:
     """
-    Rileva le emozioni primarie basate sui pattern di espressioni facciali.
-    Per ogni gruppo di AU, è sufficiente che sia presente almeno una delle varianti (L o R).
+    Detects primary emotions based on facial expression patterns.
+    For each AU group, at least one of the variants (L or R) must be present.
     
     Args:
-        df: DataFrame con i dati aggregati per secondo
-        output_file: Nome del file di output (opzionale)
+        df: DataFrame with data aggregated by second
+        output_file: Output file name (optional)
         
     Returns:
-        DataFrame con i timestamp e le emozioni rilevate ordinate per intensità
+        DataFrame with timestamps and detected emotions ordered by intensity
     """
-    # Risultati delle emozioni
+    # Emotion results
     all_results = []
     
-    # Elaboro ogni timestamp separatamente
+    # Process each timestamp separately
     for time, group in df.groupby('Time'):
-        # Creo un dizionario per mappare expression a weight
+        # Create a dictionary to map expression to weight
         expression_to_weight = dict(zip(group['Expression'], group['Weight']))
         
-        # Calcolo l'intensità di ogni emozione primaria
+        # Calculate the intensity of each primary emotion
         emotion_intensities = {}
         
         for emotion, pattern_groups in emotion_primary_patterns.items():
-            # Verifico se ogni gruppo di AU è attivato (almeno una variante L o R)
+            # Check if each AU group is activated (at least one L or R variant)
             all_groups_active = True
             group_weights = []
             
             for au_group in pattern_groups:
-                # Controllo se almeno una variante nel gruppo è presente
+                # Check if at least one variant in the group is present
                 group_active = False
                 max_weight_in_group = 0
                 
@@ -231,34 +251,34 @@ def detect_emotions(df: pd.DataFrame, output_file: Optional[str] = None) -> pd.D
                         if expression_to_weight[au] > max_weight_in_group:
                             max_weight_in_group = expression_to_weight[au]
                 
-                # Se nessuna variante del gruppo è attiva, l'emozione non è attivata
+                # If no variant of the group is active, the emotion is not activated
                 if not group_active:
                     all_groups_active = False
                     break
                 
-                # Aggiungo il peso massimo per questo gruppo
+                # Add the maximum weight for this group
                 group_weights.append(max_weight_in_group)
             
-            # Calcolo l'intensità media solo se tutti i gruppi sono attivi
+            # Calculate the average intensity only if all groups are active
             if all_groups_active:
                 emotion_intensities[emotion] = sum(group_weights) / len(group_weights)
             else:
                 emotion_intensities[emotion] = 0
         
-        # Normalizzazione delle intensità delle emozioni per questo timestamp
+        # Normalize emotion intensities for this timestamp
         total_intensity = sum(emotion_intensities.values())
-        if total_intensity > 0:  # Evito divisione per zero
+        if total_intensity > 0:  # Avoid division by zero
             for emotion in emotion_intensities:
                 emotion_intensities[emotion] /= total_intensity
         
-        # Ordino le emozioni per intensità (dalla più intensa alla meno intensa)
+        # Sort emotions by intensity (from most intense to least intense)
         sorted_emotions = sorted(
             emotion_intensities.items(), 
             key=lambda x: x[1], 
             reverse=True
         )
         
-        # Aggiungo i risultati per questo timestamp
+        # Add results for this timestamp
         time_results = []
         for emotion, intensity in sorted_emotions:
             time_results.append({
@@ -269,7 +289,7 @@ def detect_emotions(df: pd.DataFrame, output_file: Optional[str] = None) -> pd.D
         
         all_results.extend(time_results)
     
-    # Creo un DataFrame dai risultati
+    # Create a DataFrame from results
     results_df = pd.DataFrame(all_results)
     
     if output_file:
@@ -277,54 +297,53 @@ def detect_emotions(df: pd.DataFrame, output_file: Optional[str] = None) -> pd.D
     
     return results_df
 
-
 def create_final_dataset(emotions_df: pd.DataFrame, threshold: float = 0.25, 
                          output_file: Optional[str] = None) -> pd.DataFrame:
     """
-    Crea un dataset finale con un'unica riga per timestamp, contenente 
-    l'intensità di tutte le 6 emozioni e l'emozione dominante.
+    Creates a final dataset with a single row per timestamp, containing
+    the intensity of all 6 emotions and the dominant emotion.
     
     Args:
-        emotions_df: DataFrame con i dati di emozioni (output di detect_emotions)
-        threshold: Soglia minima di intensità per considerare un'emozione (default: 0.25)
-        output_file: Nome del file di output (opzionale)
+        emotions_df: DataFrame with emotion data (output from detect_emotions)
+        threshold: Minimum intensity threshold to consider an emotion (default: 0.25)
+        output_file: Output file name (optional)
         
     Returns:
-        DataFrame con il dataset finale
+        DataFrame with the final dataset
     """
-    # Lista di tutte le emozioni
+    # List of all emotions
     all_emotions = ["happiness", "sadness", "surprise", "fear", "anger", "disgust"]
     
-    # Preparo un dizionario per contenere i risultati
+    # Prepare a dictionary to contain results
     final_results = []
     
-    # Per ogni timestamp, trovo l'emozione dominante
+    # For each timestamp, find the dominant emotion
     for time, group in emotions_df.groupby('Time'):
-        # Creo un dizionario per mappare emozione a intensità
+        # Create a dictionary to map emotion to intensity
         emotion_to_intensity = dict(zip(group['Emotion'], group['Intensity']))
         
-        # Trovo l'emozione con la massima intensità
+        # Find the emotion with maximum intensity
         max_emotion = max(emotion_to_intensity.items(), key=lambda x: x[1])
         dominant_emotion = max_emotion[0]
         dominant_intensity = max_emotion[1]
         
-        # Se l'intensità è sotto la soglia, etichetta come "neutral"
+        # If intensity is below threshold, label as "neutral"
         if dominant_intensity < threshold:
             dominant_emotion = "neutral"
         
-        # Preparo una riga per questo timestamp
+        # Prepare a row for this timestamp
         row = {'Time': time, 'DominantEmotion': dominant_emotion}
         
-        # Aggiungo l'intensità di ogni emozione
+        # Add the intensity of each emotion
         for emotion in all_emotions:
             row[emotion] = emotion_to_intensity.get(emotion, 0)
         
         final_results.append(row)
     
-    # Creo un DataFrame dai risultati
+    # Create a DataFrame from results
     final_df = pd.DataFrame(final_results)
     
-    # Riordino le colonne
+    # Reorder columns
     columns = ['Time'] + all_emotions + ['DominantEmotion']
     final_df = final_df[columns]
     
@@ -333,89 +352,264 @@ def create_final_dataset(emotions_df: pd.DataFrame, threshold: float = 0.25,
     
     return final_df
 
-def process_file(file_path: str, threshold: float, logger: logging.Logger) -> str:
+def generate_statistics(df: pd.DataFrame, output_base_path: str, task_name: Optional[str] = None, logger: logging.Logger = None) -> Dict:
     """
-    Elabora un singolo file CSV attraverso tutte le fasi di processing.
+    Generates and saves statistics based on the processed emotion data.
     
     Args:
-        file_path: Path del file da elaborare
-        threshold: Soglia per considerare un'emozione valida
-        logger: Logger per il logging
+        df: DataFrame with emotion data
+        output_base_path: Base path for output files (without extension)
+        task_name: Name of the task (optional)
+        logger: Logger for logging
+    
+    Returns:
+        Dictionary with statistics data
+    """
+    stats = {}
+    
+    if logger:
+        logger.info(f"Generating statistics for {os.path.basename(output_base_path)}")
+    
+    # Basic record counts
+    stats["total_records"] = len(df)
+    stats["timestamps"] = df["Time"].nunique()
+    
+    # Emotion statistics
+    if 'DominantEmotion' in df.columns:
+        emotion_counts = df['DominantEmotion'].value_counts().to_dict()
+        emotion_percentages = (df['DominantEmotion'].value_counts(normalize=True) * 100).to_dict()
+        
+        stats["emotion_counts"] = emotion_counts
+        stats["emotion_percentages"] = {k: f"{v:.2f}%" for k, v in emotion_percentages.items()}
+        
+        # Find the most common emotion
+        most_common_emotion = max(emotion_counts.items(), key=lambda x: x[1])
+        stats["most_common_emotion"] = {
+            "emotion": most_common_emotion[0],
+            "count": most_common_emotion[1],
+            "percentage": stats["emotion_percentages"][most_common_emotion[0]]
+        }
+    
+    # Average intensity of each emotion
+    all_emotions = ["happiness", "sadness", "surprise", "fear", "anger", "disgust"]
+    avg_intensities = {}
+    for emotion in all_emotions:
+        if emotion in df.columns:
+            avg_intensities[emotion] = df[emotion].mean()
+    
+    stats["average_intensities"] = avg_intensities
+    
+    # If task name is provided, add it to the statistics
+    if task_name:
+        stats["task_name"] = task_name
+    
+    # Add timestamp for when the statistics were generated
+    stats["generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Save statistics to JSON file
+    stats_file = f"{output_base_path}_statistics.json"
+    with open(stats_file, 'w') as f:
+        json.dump(stats, f, indent=4)
+    
+    if logger:
+        logger.info(f"Statistics saved to {stats_file}")
+    
+    # Generate a pie chart of emotion distribution
+    if 'DominantEmotion' in df.columns:
+        try:
+            plt.figure(figsize=(10, 7))
+            emotion_counts = df['DominantEmotion'].value_counts()
+            
+            # Use a nice color palette
+            colors = plt.cm.tab10(np.arange(len(emotion_counts)))
+            
+            # Create pie chart
+            plt.pie(emotion_counts, labels=emotion_counts.index, autopct='%1.1f%%', startangle=140, colors=colors)
+            plt.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+            plt.title('Distribution of Emotions')
+            
+            # Save the chart
+            chart_file = f"{output_base_path}_emotion_chart.png"
+            plt.savefig(chart_file)
+            plt.close()
+            
+            if logger:
+                logger.info(f"Emotion distribution chart saved to {chart_file}")
+        except Exception as e:
+            if logger:
+                logger.warning(f"Could not generate emotion chart: {str(e)}")
+    
+    return stats
+
+def process_task_data(task_df: pd.DataFrame, task_name: str, threshold: float, 
+                      logger: logging.Logger, split_output_files: bool = False) -> pd.DataFrame:
+    """
+    Processes data from a single task.
+    
+    Args:
+        task_df: DataFrame with task data
+        task_name: Task name (e.g., "task_1")
+        threshold: Threshold to consider an emotion valid
+        logger: Logger for logging
+        split_output_files: If True, save intermediate files for this task
         
     Returns:
-        Path del file finale con i risultati
+        DataFrame with the final dataset for this task
     """
-    logger.info(f"Inizio elaborazione del file: {file_path}")
+    logger.info(f"Processing task: {task_name}")
     
-    # Nome base per i file di output
+    # Aggregation by second
+    aggregated_df = aggregate_by_second(task_df)
+    if split_output_files:
+        aggregated_file = os.path.join("results/aggregated", f"{task_name}_aggregated.csv")
+        aggregated_df.to_csv(aggregated_file, index=False)
+        logger.info(f"Aggregation saved: {aggregated_file}")
+    
+    # Emotion detection
+    emotions_df = detect_emotions(aggregated_df)
+    if split_output_files:
+        emotions_file = os.path.join("results/emotions", f"{task_name}_emotions.csv")
+        emotions_df.to_csv(emotions_file, index=False)
+        logger.info(f"Emotions saved: {emotions_file}")
+    
+    # Final dataset
+    final_df = create_final_dataset(emotions_df, threshold)
+    if split_output_files:
+        final_file = os.path.join("results/final", f"{task_name}_final.csv")
+        final_df.to_csv(final_file, index=False)
+        logger.info(f"Final dataset saved: {final_file}")
+    
+    # Add a column with the task name (will be removed in the final output)
+    final_df['Task'] = task_name
+    
+    return final_df
+
+def process_file(file_path: str, threshold: float, logger: logging.Logger, 
+                 split_output_files: bool = False) -> str:
+    """
+    Processes a single CSV file through all processing phases.
+    
+    Args:
+        file_path: Path of the file to process
+        threshold: Threshold to consider an emotion valid
+        logger: Logger for logging
+        split_output_files: If True, create separate files for each task
+        
+    Returns:
+        Path of the final results file
+    """
+    logger.info(f"Starting to process file: {file_path}")
+    
+    # Base name for output files
     base_name = os.path.basename(file_path)
     name_without_ext = os.path.splitext(base_name)[0]
     
-    # Leggi il file
-    try:
-        df = pd.read_csv(file_path)
-        logger.info(f"File letto correttamente: {file_path}")
-    except Exception as e:
-        logger.error(f"Errore nella lettura del file {file_path}: {str(e)}")
-        raise
+    # Split the file into tasks
+    task_data_list = split_tasks_data(file_path, logger)
+    logger.info(f"File split into {len(task_data_list)} tasks")
     
-    # Aggregazione per secondo
-    aggregated_file = os.path.join("results/aggregated", f"{name_without_ext}_aggregated.csv")
-    aggregated_df = aggregate_by_second(df, aggregated_file)
-    logger.info(f"Aggregazione completata: {aggregated_file}")
+    # List to contain all final results
+    all_final_results = []
     
-    # Rilevamento delle emozioni
-    emotions_file = os.path.join("results/emotions", f"{name_without_ext}_emotions.csv")
-    emotions_df = detect_emotions(aggregated_df, emotions_file)
-    logger.info(f"Rilevamento emozioni completato: {emotions_file}")
+    # Process each task
+    for task_df, task_name in task_data_list:
+        final_df = process_task_data(task_df, task_name, threshold, logger, split_output_files)
+        all_final_results.append(final_df)
     
-    # Dataset finale
-    final_file = os.path.join("results/final", f"{name_without_ext}_final.csv")
-    final_df = create_final_dataset(emotions_df, threshold, final_file)
-    logger.info(f"Dataset finale creato: {final_file}")
+    # Create directories for statistics files if they don't exist
+    Path("results/statistics").mkdir(exist_ok=True, parents=True)
     
-    return final_file
+    if split_output_files:
+        # Original mode: one file per task
+        result_files = []
+        for i, final_df in enumerate(all_final_results):
+            task_name = task_data_list[i][1]
+            if len(all_final_results) == 1:
+                # If there's only one task, use the base name of the input file
+                final_name = f"{name_without_ext}_final.csv"
+            else:
+                # If there are multiple tasks, use the task name
+                final_name = f"{name_without_ext}_{task_name}_final.csv"
+            
+            # Remove the Task column before saving
+            if 'Task' in final_df.columns:
+                final_df = final_df.drop(columns=['Task'])
+            
+            final_file = os.path.join("results/final", final_name)
+            final_df.to_csv(final_file, index=False)
+            
+            # Generate statistics for this task
+            stats_base_path = os.path.join("results/statistics", f"{name_without_ext}_{task_name}")
+            generate_statistics(final_df, stats_base_path, task_name, logger)
+            
+            result_files.append(final_file)
+            logger.info(f"Final file saved: {final_file}")
+        
+        return result_files[0] if len(result_files) == 1 else result_files
+    else:
+        # Aggregated mode: a single file with all tasks
+        combined_df = pd.concat(all_final_results, ignore_index=True)
+        
+        # Remove the Task column before saving
+        if 'Task' in combined_df.columns:
+            combined_df = combined_df.drop(columns=['Task'])
+        
+        final_file = os.path.join("results/final", f"{name_without_ext}_final.csv")
+        combined_df.to_csv(final_file, index=False)
+        
+        # Generate statistics for the combined file
+        stats_base_path = os.path.join("results/statistics", f"{name_without_ext}")
+        generate_statistics(combined_df, stats_base_path, None, logger)
+        
+        logger.info(f"Final aggregated file saved: {final_file}")
+        
+        return final_file
 
-def process_files(file_paths: List[str], threshold: float, logger: logging.Logger) -> List[str]:
+def process_files(file_paths: List[str], threshold: float, logger: logging.Logger, 
+                  split_output_files: bool = False) -> List[str]:
     """
-    Elabora una lista di file CSV.
+    Processes a list of CSV files.
     
     Args:
-        file_paths: Lista dei path dei file da elaborare
-        threshold: Soglia per considerare un'emozione valida
-        logger: Logger per il logging
+        file_paths: List of file paths to process
+        threshold: Threshold to consider an emotion valid
+        logger: Logger for logging
+        split_output_files: If True, create separate files for each task
         
     Returns:
-        Lista dei path dei file finali con i risultati
+        List of paths of the final results files
     """
-    logger.info(f"Inizio elaborazione di {len(file_paths)} file")
+    logger.info(f"Starting to process {len(file_paths)} files")
+    logger.info(f"Split output files: {split_output_files}")
     
-    # Crea le directory per organizzare i diversi tipi di file
-    for dir_path in ["results", "results/sanitized", "results/aggregated", "results/emotions", "results/final", "temp"]:
+    # Create directories to organize different types of files
+    dirs_to_create = ["results", "results/sanitized", "results/final", "results/statistics"]
+    if split_output_files:
+        dirs_to_create.extend(["results/aggregated", "results/emotions"])
+    
+    for dir_path in dirs_to_create:
         Path(dir_path).mkdir(exist_ok=True, parents=True)
     
     result_files = []
     
     for file_path in file_paths:
         try:
-            # Sanitizza il file
+            # Sanitize the file
             sanitized_file = sanitize_dataset(file_path, "results/sanitized", logger)
-            logger.info(f"File sanitizzato: {sanitized_file}")
+            logger.info(f"Sanitized file: {sanitized_file}")
             
-            # Dividi il file in task se necessario
-            task_files = split_tasks(sanitized_file, "results/sanitized", logger)
-            logger.info(f"File divisi in {len(task_files)} task")
+            # Process the file
+            result_file = process_file(sanitized_file, threshold, logger, split_output_files)
             
-            # Elabora ogni file di task
-            for task_file in task_files:
-                try:
-                    result_file = process_file(task_file, threshold, logger)
-                    result_files.append(result_file)
-                    logger.info(f"Elaborazione completata per {task_file}")
-                except Exception as e:
-                    logger.error(f"Errore nell'elaborazione del file {task_file}: {str(e)}")
+            # Handle the case where process_file returns a list or a single file
+            if isinstance(result_file, list):
+                result_files.extend(result_file)
+            else:
+                result_files.append(result_file)
+            
+            logger.info(f"Processing completed for {file_path}")
         
         except Exception as e:
-            logger.error(f"Errore nella preparazione del file {file_path}: {str(e)}")
+            logger.error(f"Error processing file {file_path}: {str(e)}")
     
     return result_files
